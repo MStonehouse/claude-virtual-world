@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Primordia — Artificial Life</title>
+  <meta name="description" content="An artificial life sandbox: organisms forage, reproduce, mutate and evolve under natural selection.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <div>
+        <h1>Primordia</h1>
+        <p class="tagline">an artificial life sandbox</p>
+      </div>
+    </div>
+    <div class="clock">
+      <span class="pill" id="seasonPill">Spring</span>
+      <span class="metric"><b id="tickLabel">0</b> ticks</span>
+      <span class="metric dim" id="tpsLabel">0 ticks/s</span>
+    </div>
+    <div class="top-actions">
+      <button class="btn primary" id="pauseBtn" title="Pause or resume (Space)">Pause</button>
+      <button class="btn" id="stepBtn" title="Advance one tick while paused (S)" disabled>Step</button>
+      <button class="btn danger" id="resetBtn" title="Start a brand-new world (R)">Reset</button>
+      <button class="btn ghost" id="helpBtn" title="How it works (H)">?</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Left: controls -->
+    <aside class="sidebar left">
+      <section class="panel">
+        <h2>Simulation</h2>
+        <label class="control" title="How many simulation ticks run per screen frame.">
+          <span class="row"><span>Speed</span><output id="speedOut">1×</output></span>
+          <input type="range" id="speed" min="0" max="9" step="1" value="2">
+        </label>
+        <label class="control" title="How quickly new food grows. Less food means fiercer competition.">
+          <span class="row"><span>Food abundance</span><output id="foodOut">100%</output></span>
+          <input type="range" id="food" min="0" max="300" step="5" value="100">
+        </label>
+        <label class="control" title="The chance that each gene changes when an organism is born.">
+          <span class="row"><span>Mutation rate</span><output id="mutRateOut">12%</output></span>
+          <input type="range" id="mutRate" min="0" max="60" step="1" value="12">
+        </label>
+        <label class="control" title="How big a typical mutation is, as a fraction of the gene's value.">
+          <span class="row"><span>Mutation strength</span><output id="mutStrOut">12%</output></span>
+          <input type="range" id="mutStr" min="1" max="40" step="1" value="12">
+        </label>
+        <label class="toggle" title="Food grows faster in summer and slower in winter.">
+          <input type="checkbox" id="seasons" checked>
+          <span class="switch"></span><span>Seasons</span>
+        </label>
+      </section>
+
+      <section class="panel">
+        <h2>Predators</h2>
+        <p class="hint">Hunters that eat herbivores. They evolve too, so watch the arms race.</p>
+        <div class="btn-row">
+          <button class="btn pred" id="addPredBtn" title="Release 10 predators at random (P)">Release 10</button>
+          <button class="btn" id="removePredBtn" title="Remove every predator">Remove all</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Display</h2>
+        <label class="control">
+          <span class="row"><span>Colour organisms by</span></span>
+          <select id="colorBy">
+            <option value="lineage">Lineage (family colour)</option>
+            <option value="speed">Speed</option>
+            <option value="vision">Vision</option>
+            <option value="efficiency">Efficiency</option>
+            <option value="size">Size</option>
+            <option value="energy">Energy</option>
+          </select>
+        </label>
+        <div class="gradient-key" id="gradientKey" hidden><span>low</span><i></i><span>high</span></div>
+        <label class="toggle"><input type="checkbox" id="showVision"><span class="switch"></span><span>Vision ranges</span></label>
+        <label class="toggle"><input type="checkbox" id="showZones" checked><span class="switch"></span><span>Fertile zones &amp; tall grass</span></label>
+        <label class="toggle"><input type="checkbox" id="showTrails" checked><span class="switch"></span><span>Motion trails</span></label>
+      </section>
+
+      <section class="panel">
+        <h2>Statistics</h2>
+        <dl class="stats" id="stats"></dl>
+      </section>
+    </aside>
+
+    <!-- Centre: the world -->
+    <section class="stage" id="stage">
+      <canvas id="world" aria-label="Simulation world"></canvas>
+
+      <div class="toolbar" id="toolbar" role="toolbar" aria-label="Tools">
+        <button class="tool active" data-tool="inspect" title="Inspect: click an organism to study it, drag to pan (1)">
+          <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></svg><span>Inspect</span>
+        </button>
+        <button class="tool" data-tool="food" title="Feed: click or drag to scatter food (2)">
+          <svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="2.2"/><circle cx="15" cy="7" r="2.2"/><circle cx="12" cy="15" r="2.2"/><circle cx="18" cy="15" r="1.6"/><circle cx="6" cy="16" r="1.6"/></svg><span>Feed</span>
+        </button>
+        <button class="tool" data-tool="herb" title="Seed herbivore: click to place one, Shift-click for five (3)">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><circle cx="15.5" cy="10.5" r="1.3" class="fill"/></svg><span>Herbivore</span>
+        </button>
+        <button class="tool" data-tool="pred" title="Seed predator: click to place one, Shift-click for five (4)">
+          <svg viewBox="0 0 24 24"><path d="M5 18L19 12 5 6l3 6z"/></svg><span>Predator</span>
+        </button>
+        <button class="tool" data-tool="meteor" title="Meteor: click to wipe out everything in an area (5)">
+          <svg viewBox="0 0 24 24"><circle cx="15" cy="15" r="4"/><path d="M12 12L4 4M14 10L8 3M10 14L3 8"/></svg><span>Meteor</span>
+        </button>
+      </div>
+
+      <div class="hud">
+        <span id="zoomLabel">100%</span>
+        <button class="hud-btn" id="fitBtn" title="Reset the view (0)">Fit</button>
+      </div>
+
+      <div class="overlay" id="extinctOverlay" hidden>
+        <div class="card">
+          <h3>Life has ended</h3>
+          <p id="extinctText">Every herbivore has died.</p>
+          <div class="btn-row">
+            <button class="btn primary" id="reseedBtn">Seed 40 herbivores</button>
+            <button class="btn" id="extinctResetBtn">New world</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="overlay" id="helpOverlay" hidden>
+        <div class="card wide">
+          <button class="close" id="helpClose" aria-label="Close">×</button>
+          <h3>How Primordia works</h3>
+          <p>Each organism has a <b>genome</b> of four traits. Every tick it spends energy just to stay alive. Speed, vision and size all add to that cost. Eating restores energy. With enough stored energy, an adult splits in two, and its child inherits its genes, sometimes with small random <b>mutations</b>.</p>
+          <p>No code chooses the winners. Organisms whose traits suit the current world gather more energy than they burn, so they have more children and their genes spread. That is natural selection.</p>
+          <ul class="trait-help" id="traitHelp"></ul>
+          <p><b>Ecology:</b> food grows mostly in drifting <span class="g">fertile zones</span>, and their dense centres are <span class="g">tall grass</span> where predators struggle to spot prey. Seasons change how fast food grows. Herbivores that starve leave <span class="c">carrion</span>, which predators scavenge.</p>
+          <p class="keys"><kbd>Space</kbd> pause · <kbd>S</kbd> step · <kbd>R</kbd> reset · <kbd>P</kbd> release predators · <kbd>1</kbd>–<kbd>5</kbd> tools · <kbd>F</kbd> follow selected · <kbd>Esc</kbd> deselect · scroll to zoom, drag to pan</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: charts and inspector -->
+    <aside class="sidebar right">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Population</h2>
+          <div class="legend" id="popLegend">
+            <button class="key on" data-series="herb"><i class="sw herb"></i>Herbivores</button>
+            <button class="key on" data-series="pred"><i class="sw pred"></i>Predators</button>
+            <button class="key" data-series="food"><i class="sw food"></i>Food</button>
+          </div>
+        </div>
+        <canvas class="chart" id="popChart"></canvas>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Evolution</h2>
+          <div class="tabs" id="traitTabs"></div>
+        </div>
+        <canvas class="chart" id="traitChart"></canvas>
+        <p class="hint">Line = average, band = spread (±1 standard deviation). Solid = herbivores, dashed = predators.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Trait distribution</h2>
+        <div class="hists" id="hists"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Inspector</h2>
+        <div id="inspector" class="inspector"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Chronicle</h2>
+        <ol class="log" id="log"></ol>
+      </section>
+    </aside>
+  </main>
+
+  <div class="error-banner" id="errorBanner" hidden></div>
+
+  <script src="sim.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
